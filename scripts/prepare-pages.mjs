@@ -15,6 +15,13 @@ async function walk(dir) {
       content = content
         .replaceAll('"/_next/', `"${prefix}/_next/`)
         .replaceAll("'/_next/", `'${prefix}/_next/`)
+        // Vinext's runtime keeps lazy chunk paths without a leading slash and
+        // prepends `/` at runtime. On a project Pages site that would escape
+        // the repository path, so teach the runtime to include the prefix.
+        .replaceAll(
+          "Vc=function(e){return`/`+e}",
+          `Vc=function(e){return\`${prefix}/\`+e}`,
+        )
         .replaceAll('"/favicon.svg"', `"${prefix}/favicon.svg"`)
         .replaceAll("'/favicon.svg'", `'${prefix}/favicon.svg'`);
       await writeFile(file, content);
