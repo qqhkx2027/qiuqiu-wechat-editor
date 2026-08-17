@@ -4,6 +4,8 @@
 
 一个面向微信公众号写作的 Markdown 实时排版工具：左侧编辑，右侧预览，顶部选择主题，最后复制为公众号兼容 HTML。
 
+在线体验：<https://qqhkx2027.github.io/qiuqiu-wechat-editor/>
+
 ## 使用
 
 1. 双击 `启动编辑器.command`。
