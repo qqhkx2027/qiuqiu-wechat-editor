@@ -29,8 +29,8 @@ jobs:
         run: npm ci
       - name: Build static site
         run: npm run build
-      - name: Flatten repository path for Pages
-        run: cp -R dist/client/qiuqiu-wechat-editor/. dist/client/
+      - name: Prepare repository path for Pages
+        run: node scripts/prepare-pages.mjs
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
