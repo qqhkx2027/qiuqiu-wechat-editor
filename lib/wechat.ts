@@ -2,7 +2,7 @@
 // 复制到公众号时不再“抄预览 DOM 的 getComputedStyle”，而是直接从 Markdown
 // 重新生成一套全内联样式、微信后台兼容度最高的 HTML。
 // 关键设计：
-// - 只用微信稳定支持的标签：p / span / strong / em / ul / li / img / table / pre / blockquote / section
+// - 只用微信稳定支持的标签：p / span / strong / em / ul / li / img / table / pre
 // - 视觉参数全部显式写进 style（正文 #333/17px/1.85，章节 #D9898E 60px，小节 #3A8BE8…）
 // - 章节数字、小节序号在导出时直接生成文本，不依赖 CSS ::before/::after
 // - 不依赖任何 class（微信后台会清 class），也不依赖 getComputedStyle（预览与导出解耦）
@@ -45,13 +45,13 @@ const chapter = (num: number, titleHtml: string) =>
   titleHtml +
   "</p>";
 
-// 小节：蓝色加粗，带「1.1｜」或「01｜」前缀
+// 小节：蓝色加粗，带「1.1｜」或「01｜」前缀。
+// 前缀不单独包 <span>：微信后台常把 span 单独转成一个块导致“编号与标题断行”。
+// 整个 <p> 已是蓝色，前缀直接作为普通文本拼在标题前。
 const section = (prefix: string, titleHtml: string) =>
   '<p style="margin:28px 0 12px;padding:0;font-size:17px;line-height:1.6;font-weight:800;color:#3A8BE8;' +
   'text-align:left;">' +
-  '<span style="font-weight:800;color:#3A8BE8;">' +
   prefix +
-  "</span>" +
   titleHtml +
   "</p>";
 
@@ -151,11 +151,15 @@ const codeHtml = (text: string) =>
   escapeHtml(text) +
   "</pre>";
 
-const quoteHtml = (html: string) =>
-  '<section style="background:#F7FAFE;border:none;border-left:3px solid #74AEEF;padding:10px 14px;' +
-  "margin:20px 0;overflow:hidden;color:#333333;font-size:17px;line-height:1.85;\">" +
-  html +
-  "</section>";
+// 引用：不用 <section> 容器（微信后台会把 section 当作独立容器引发窄排/拆行），
+// 改为连续多行 <p> + 左侧蓝边。
+const QUOTE_LINE =
+  "margin:0;padding:3px 12px;font-size:17px;line-height:1.85;color:#333333;" +
+  "text-align:left;border-left:3px solid #74AEEF;background:#F7FAFE;";
+const quoteHtml = (rows: string[]) =>
+  rows
+    .map((q) => '<p style="' + QUOTE_LINE + '">' + wechatInline(q) + "</p>")
+    .join("");
 
 // 逐行块级解析（预览渲染器同一套逻辑，但输出微信专用 HTML）
 export function renderWechat(md: string): string {
@@ -180,7 +184,7 @@ export function renderWechat(md: string): string {
   };
   const flushQuote = () => {
     if (quoteSection.length) {
-      out += quoteHtml(quoteSection.map((q) => "<p style='margin:0 0 6px;'>" + wechatInline(q) + "</p>").join(""));
+      out += quoteHtml(quoteSection);
       quoteSection = [];
     }
   };
@@ -229,7 +233,12 @@ export function renderWechat(md: string): string {
         "</p>";
     } else if (/^\s*(---+|___+|\*\s*\*\s*\*+)\s*$/.test(line)) {
       flush();
-      out += '<section style="border:none;border-top:1px solid #74AEEF;width:46px;margin:32px auto;"/>';
+      // 分隔线：不用 <section>（微信会把自闭合 section 当成未关闭容器，把后续
+      // 内容包进窄容器导致每两字一行的竖排），改为 p + 内层 span 装饰线。
+      out +=
+        '<p style="margin:28px auto;padding:0;line-height:0;text-align:center;">' +
+        '<span style="display:inline-block;width:46px;border-top:1px solid #74AEEF;">' +
+        "&nbsp;</span></p>";
     } else if (isTable) {
       flush();
       const rows: string[] = [line];

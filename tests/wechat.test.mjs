@@ -22,10 +22,10 @@ test("微信导出：章节数字不用 div/h1，用 p 包裹", () => {
   assert.match(html, /<p style="[^"]*">第一章<\/p>/);
 });
 
-test("微信导出：小节使用 p+span 前缀，不加 h2", () => {
+test("微信导出：小节使用 p 内拼前缀文本，不加 h2/span", () => {
   const html = renderWechat("# a\n## b\n");
   assert.doesNotMatch(html, /<h2/);
-  assert.match(html, /<span[^>]*>1\.1｜<\/span>/);
+  assert.match(html, />1\.1｜b<\/p>/);
 });
 
 test("微信导出：列表不使用 ::marker，蓝色前缀 span", () => {
@@ -43,17 +43,28 @@ test("微信导出：危险链接/图片被净化", () => {
 test("微信导出：代码块、引用、分割线、表格", () => {
   const md = "> 引用\n\n---\n\n```js\nconst x=1;\n```\n\n| a | b |\n| --- | --- |\n| 1 | 2 |\n";
   const html = renderWechat(md);
-  assert.match(html, /<section style="[^"]*border-left:3px solid #74AEEF/);
+  assert.match(html, /<p style="[^"]*border-left:3px solid #74AEEF/);
   assert.match(html, /<pre style="/);
   assert.match(html, /<table style="/);
-  assert.match(html, /width:46px/);
+  assert.match(html, /display:inline-block;width:46px/);
 });
 
 
 test("微信导出：连续引用行合并为一个引用块", () => {
   const html = renderWechat("> 第一行\n> 第二行\n");
-  assert.equal((html.match(/<section style="[^"]*border-left:3px solid #74AEEF/g) || []).length, 1);
-  assert.match(html, /第一行<\/p><p style='margin:0 0 6px;'>第二行/);
+  assert.equal((html.match(/<p style="[^"]*border-left:3px solid #74AEEF/g) || []).length, 2);
+  assert.match(html, /第一行<\/p><p style="[^"]*">第二行/);
+});
+
+test("微信导出：不用 section 标签，避免公众号窄容器拆行", () => {
+  const html = renderWechat("> 引用\n\n---\n\n## 小节\n");
+  assert.doesNotMatch(html, /<section/i);
+});
+
+test("微信导出：小节前缀不包 span，编号与标题不断行", () => {
+  const html = renderWechat("## 小节\n");
+  assert.match(html, /01｜小节/);
+  assert.doesNotMatch(html, /<span[^>]*>01｜<\/span>/);
 });
 
 test("微信导出：嵌套列表保留层级（ul>li>ul）", () => {
