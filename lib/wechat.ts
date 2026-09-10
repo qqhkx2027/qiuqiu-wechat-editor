@@ -67,10 +67,12 @@ const imageHtml = (src: string, alt: string, isCover = false) =>
 
 // 列表：微信对 list-style 支持不稳定，手工生成蓝色圆点/数字前缀。
 // 支持嵌套层级：缩进子项递归渲染到子 <ul>。
+// marker 用 <strong> 行内元素（同正文加粗），不包 span+inline-block——
+// 微信后台会把 inline-block span 单独转成块，导致“圆点/编号”与文本断行。
 type ListRow = { ordered: boolean; depth: number; text: string };
 const LIST_LI =
   "margin:6px 0;padding:0;font-size:17px;line-height:1.85;letter-spacing:.2px;" +
-  "color:#333333;text-align:justify;list-style:none;";
+  "color:#333333;text-align:left;list-style:none;";
 
 function renderListLevel(rows: ListRow[], start: number, parentDepth: number): { html: string; next: number } {
   if (start >= rows.length || rows[start].depth <= parentDepth) return { html: "", next: start };
@@ -84,13 +86,16 @@ function renderListLevel(rows: ListRow[], start: number, parentDepth: number): {
     count += 1;
     i += 1;
     const marker = ordered ? count + ". " : row.depth > 0 ? "◦ " : "• ";
+    const markerStyle = "color:#3A8BE8;font-weight:700;margin-right:.4em;";
     out +=
       '<li style="' +
       LIST_LI +
       '">' +
-      '<span style="color:#3A8BE8;font-weight:700;display:inline-block;min-width:1.4em;">' +
+      '<strong style="' +
+      markerStyle +
+      '">' +
       marker +
-      "</span>" +
+      "</strong>" +
       wechatInline(row.text);
     if (i < rows.length && rows[i].depth > row.depth) {
       const child = renderListLevel(rows, i, row.depth);

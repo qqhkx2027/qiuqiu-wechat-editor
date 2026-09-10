@@ -31,8 +31,15 @@ test("微信导出：小节使用 p 内拼前缀文本，不加 h2/span", () => 
 test("微信导出：列表不使用 ::marker，蓝色前缀 span", () => {
   const html = renderWechat("- 甲\n- 乙\n");
   assert.match(html, /<ul style="[^"]*list-style:none/);
-  assert.match(html, /<span style="color:#3A8BE8[^"]*">• <\/span>甲/);
-  assert.match(html, /<span style="color:#3A8BE8[^"]*">• <\/span>乙/);
+  assert.match(html, /<strong style="color:#3A8BE8;font-weight:700;margin-right:.4em;">• <\/strong>甲/);
+  assert.match(html, /<strong style="color:#3A8BE8;font-weight:700;margin-right:.4em;">• <\/strong>乙/);
+});
+
+test("微信导出：列表 marker 不用 inline-block span，避免微信拆行", () => {
+  const html = renderWechat("- 甲\n1. 乙\n");
+  assert.doesNotMatch(html, /display:inline-block[^>]*>• /);
+  assert.doesNotMatch(html, /<span style="color:#3A8BE8[^"]*">/);
+  assert.match(html, /<strong style="color:#3A8BE8;font-weight:700;margin-right:.4em;">1\. <\/strong>乙/);
 });
 
 test("微信导出：危险链接/图片被净化", () => {
