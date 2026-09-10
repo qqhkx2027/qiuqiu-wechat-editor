@@ -80,58 +80,7 @@ console.log(editor.name);
 # 第二章节`;
 
 import { render } from "../lib/render";
-
-const copyStyleProps = ["color", "font-family", "font-size", "font-weight", "line-height", "letter-spacing", "text-align", "margin", "padding", "background-color", "border", "border-left", "border-bottom", "display", "width"];
-
-function buildCopyHtml(source: HTMLElement) {
-  const clone = source.cloneNode(true) as HTMLElement;
-  const paint = (node: HTMLElement, original: HTMLElement) => {
-    const styles = getComputedStyle(original);
-    copyStyleProps.forEach((property) => node.style.setProperty(property, styles.getPropertyValue(property)));
-    Array.from(node.children).forEach((child, index) => {
-      const originalChild = original.children[index] as HTMLElement | undefined;
-      if (originalChild) paint(child as HTMLElement, originalChild);
-    });
-  };
-  paint(clone, source);
-  // 微信后台不认 list-style，这里把列表标记转成手工 span：
-  // - 顶层列表缩进归零，嵌套子列表保留层级缩进；
-  // - 无序列表按深度使用 • / ◦ / ▪，有序列表始终计数。
-  const listDepth = (list: HTMLElement): number => {
-    let depth = 0;
-    let parent: HTMLElement | null = list.parentElement;
-    while (parent) {
-      if (parent.tagName === "UL" || parent.tagName === "OL") depth += 1;
-      parent = parent.parentElement;
-    }
-    return depth;
-  };
-  clone.querySelectorAll("ul, ol").forEach((list) => {
-    const element = list as HTMLElement;
-    element.style.listStyle = "none";
-    element.style.paddingLeft = listDepth(element) > 0 ? "1.45rem" : "0";
-  });
-  clone.querySelectorAll("ul li").forEach((item) => {
-    const li = item as HTMLElement;
-    li.style.listStyle = "none";
-    const depth = listDepth(item as HTMLElement);
-    const marker = document.createElement("span");
-    marker.textContent = depth > 1 ? "◦ " : "• ";
-    marker.style.cssText = "color:#3A8BE8;font-weight:700;";
-    li.prepend(marker);
-  });
-  clone.querySelectorAll("ol").forEach((list) => {
-    Array.from(list.children).forEach((item, index) => {
-      const li = item as HTMLElement;
-      li.style.listStyle = "none";
-      const marker = document.createElement("span");
-      marker.textContent = `${index + 1}. `;
-      marker.style.cssText = "color:#3A8BE8;font-weight:700;";
-      li.prepend(marker);
-    });
-  });
-  return clone.outerHTML;
-}
+import { renderWechat } from "../lib/wechat";
 
 async function copyRichHtml(html: string) {
   const clipboardItem = typeof ClipboardItem === "undefined" ? null : ClipboardItem;
@@ -197,10 +146,11 @@ export default function Home() {
     setMd(md.slice(0, start) + text + md.slice(end));
   };
   const copy = async () => {
-    const source = document.querySelector(".article-paper") as HTMLElement | null;
-    if (!source) return;
-    const copyHtml = buildCopyHtml(source);
-    const externalImages = Array.from(source.querySelectorAll("img")).filter((image) => /^https?:/i.test(image.getAttribute("src") || "")).length;
+    // 微信导出：直接从 Markdown 生成全内联 HTML（不用 getComputedStyle 抄预览样式，
+    // 避免微信后台清洗预览 DOM 导致样式漂移，见网页版 GPT 评审）
+    const copyHtml = renderWechat(md);
+    // 外链图片计数直接解析导出 HTML，避免预览与导出两个 DOM 不一致
+    const externalImages = (copyHtml.match(/<img[^>]+src="https?:/g) || []).length;
     try {
       await copyRichHtml(copyHtml);
       setCopyStatus("copied");

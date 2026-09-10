@@ -4,7 +4,7 @@
 //   嵌套列表保留层级（递归渲染）、表格兼容无首尾竖线、连续引用行合并为一个引用块、
 //   危险 URL 协议全部降级为 #、编号模式改为全文预扫描，渲染过程不中途切换。
 
-const escapeHtml = (s: string) =>
+export const escapeHtml = (s: string) =>
   s
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
@@ -12,12 +12,12 @@ const escapeHtml = (s: string) =>
     .replaceAll('"', "&quot;");
 
 // 仅允许 http/https、相对路径（./ ../ /）、纯锚点 #；其余（javascript: data: vbscript: 等）降级为 "#"
-const safeUrl = (url: string) => {
+export const safeUrl = (url: string) => {
   const trimmed = url.trim();
   return /^(https?:|\.{0,2}\/|#)/i.test(trimmed) ? trimmed : "#";
 };
 
-const inline = (s: string) =>
+export const inline = (s: string) =>
   escapeHtml(s)
     .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_m, alt: string, src: string) => '<img src="' + safeUrl(src) + '" alt="' + alt + '"/>')
     .replace(/`([^`]+)`/g, "<code>$1</code>")
@@ -39,7 +39,7 @@ const inline = (s: string) =>
 // 旧模板：h6 章节数字（### 及更低不自动编号）
 const LEGACY_H6 = /^#{6}\s+(\d+)$/;
 // 手写编号：1、1.1 1. 02（顿号/点、点句号/全角/冒号后允许无空格）
-const HAND_NUM = /^\s*(\d+(?:\.\d+)?)\s*[、.．)）（：]\s*(.+)$/;
+export const HAND_NUM = /^\s*(\d+(?:\.\d+)?)\s*[、.．)）（：]\s*(.+)$/;
 
 const numStyle =
   "display:block;margin:20px auto 10px;color:#D9898E;" +
@@ -59,7 +59,7 @@ function detectLegacy(lines: string[]): boolean {
   for (const line of lines) {
     if (LEGACY_H6.test(line)) return true;
     const heading = line.match(/^(#{1,6})\s+(.*)$/);
-    if (heading && heading[1].length === 1 && HAND_NUM.test(heading[2])) return true;
+    if (heading && heading[1].length <= 2 && HAND_NUM.test(heading[2])) return true;
   }
   return false;
 }
@@ -175,12 +175,12 @@ export function render(md: string): string {
       flush();
       const level = heading[1].length;
       const text = heading[2];
-      const handNum = level === 1 ? text.match(HAND_NUM) : null;
+      const handNum = level <= 2 ? text.match(HAND_NUM) : null;
       if (!legacy && level === 1 && !handNum) {
         chapter += 1;
         section = 0;
         html += chapterDiv(chapter) + "<h1>" + inline(text) + "</h1>";
-      } else if (!legacy && level === 2) {
+      } else if (!legacy && level === 2 && !handNum) {
         section += 1;
         html += "<h2>" + sectionPrefix(chapter, section) + inline(text) + "</h2>";
       } else {

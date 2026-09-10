@@ -1,0 +1,287 @@
+// 微信专用导出渲染器（响应网页版 GPT 评审）：
+// 复制到公众号时不再“抄预览 DOM 的 getComputedStyle”，而是直接从 Markdown
+// 重新生成一套全内联样式、微信后台兼容度最高的 HTML。
+// 关键设计：
+// - 只用微信稳定支持的标签：p / span / strong / em / ul / li / img / table / pre / blockquote / section
+// - 视觉参数全部显式写进 style（正文 #333/17px/1.85，章节 #D9898E 60px，小节 #3A8BE8…）
+// - 章节数字、小节序号在导出时直接生成文本，不依赖 CSS ::before/::after
+// - 不依赖任何 class（微信后台会清 class），也不依赖 getComputedStyle（预览与导出解耦）
+
+import { escapeHtml, safeUrl } from "./render.ts";
+
+const INLINE_CODE =
+  "color:#12A98D;background:#F1FAF8;font-family:'SFMono-Regular',Consolas,Menlo,monospace;" +
+  "font-size:.88em;line-height:1.5;padding:1px 3px;border-radius:2px;overflow-wrap:anywhere;";
+const LINK_STYLE = "color:#16B99A;font-weight:500;text-decoration:none;";
+const STRIKE_STYLE = "color:#3A8BE8;text-decoration:line-through;";
+
+// 微信行内渲染：不依赖预览 CSS class，直接产出可粘贴的标签与样式。
+// accent 用于给标题内的强调继承标题色（章节粉红、小节蓝），普通正文强调统一蓝。
+function wechatInline(s: string, accent?: string): string {
+  const strong = "color:" + (accent || "#3A8BE8") + ";font-weight:700;";
+  const em = "color:" + (accent || "#3A8BE8") + ";font-style:italic;";
+  return escapeHtml(s)
+    .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_m: string, alt: string, src: string) => '<img src="' + escapeHtml(safeUrl(src)) + '" alt="' + escapeHtml(alt) + '"/>')
+    .replace(/`([^`]+)`/g, (_m: string, c: string) => '<code style="' + INLINE_CODE + '">' + c + '</code>')
+    .replace(/~~([^~]+)~~/g, (_m: string, t: string) => '<span style="' + STRIKE_STYLE + '">' + t + '</span>')
+    .replace(/\*\*([^*]+)\*\*/g, (_m: string, t: string) => '<strong style="' + strong + '">' + t + '</strong>')
+    .replace(/\*([^*]+)\*/g, (_m: string, t: string) => '<em style="' + em + '">' + t + '</em>')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_m: string, label: string, href: string) => '<a href="' + escapeHtml(safeUrl(href)) + '" style="' + LINK_STYLE + '">' + label + '</a>');
+}
+
+const BODY =
+  "margin:16px 0;padding:0;font-size:17px;line-height:1.85;letter-spacing:.25px;color:#333333;" +
+  "text-align:justify;overflow-wrap:break-word;" +
+  "font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','PingFang SC','Helvetica Neue',Arial,sans-serif;";
+
+// 章节数字（60px 粉红 Times）+ 章节标题（19px 粉红，居中）
+const chapter = (num: number, titleHtml: string) =>
+  '<p style="margin:20px auto 10px;padding:0;text-align:center;font-size:60px;line-height:1;' +
+  "font-weight:700;font-family:'Times New Roman',Times,'Songti SC',serif;color:#D9898E;" +
+  'font-variant-numeric:lining-nums tabular-nums;letter-spacing:-1px;white-space:nowrap;">' +
+  num +
+  '</p><p style="margin:8px auto 24px;padding:0;text-align:center;font-size:19px;line-height:1.45;' +
+  'font-weight:800;color:#D9898E;">' +
+  titleHtml +
+  "</p>";
+
+// 小节：蓝色加粗，带「1.1｜」或「01｜」前缀
+const section = (prefix: string, titleHtml: string) =>
+  '<p style="margin:28px 0 12px;padding:0;font-size:17px;line-height:1.6;font-weight:800;color:#3A8BE8;' +
+  'text-align:left;">' +
+  '<span style="font-weight:800;color:#3A8BE8;">' +
+  prefix +
+  "</span>" +
+  titleHtml +
+  "</p>";
+
+// 图片：微信要求全宽。首图（文章第一张）按主题无描边，正文图带蓝色细描边。
+const imageHtml = (src: string, alt: string, isCover = false) =>
+  '<img src="' +
+  escapeHtml(safeUrl(src)) +
+  '" alt="' +
+  escapeHtml(alt) +
+  '" style="display:block;box-sizing:border-box;width:100%;max-width:100%;height:auto;margin:18px auto 10px;' +
+  (isCover ? "border:none;border-radius:0;" : "border:1px solid #3A8BE8;border-radius:0;") +
+  '"/>';
+
+// 列表：微信对 list-style 支持不稳定，手工生成蓝色圆点/数字前缀。
+// 支持嵌套层级：缩进子项递归渲染到子 <ul>。
+type ListRow = { ordered: boolean; depth: number; text: string };
+const LIST_LI =
+  "margin:6px 0;padding:0;font-size:17px;line-height:1.85;letter-spacing:.2px;" +
+  "color:#333333;text-align:justify;list-style:none;";
+
+function renderListLevel(rows: ListRow[], start: number, parentDepth: number): { html: string; next: number } {
+  if (start >= rows.length || rows[start].depth <= parentDepth) return { html: "", next: start };
+  const first = rows[start];
+  const ordered = first.ordered;
+  let out = '<ul style="margin:0 0 0 0.45rem;padding-left:1rem;list-style:none;">';
+  let i = start;
+  let count = 0;
+  while (i < rows.length && rows[i].depth === first.depth) {
+    const row = rows[i];
+    count += 1;
+    i += 1;
+    const marker = ordered ? count + ". " : row.depth > 0 ? "◦ " : "• ";
+    out +=
+      '<li style="' +
+      LIST_LI +
+      '">' +
+      '<span style="color:#3A8BE8;font-weight:700;display:inline-block;min-width:1.4em;">' +
+      marker +
+      "</span>" +
+      wechatInline(row.text);
+    if (i < rows.length && rows[i].depth > row.depth) {
+      const child = renderListLevel(rows, i, row.depth);
+      out += child.html;
+      i = child.next;
+    }
+    out += "</li>";
+  }
+  return { html: out + "</ul>", next: i };
+}
+
+const listHtml = (rows: ListRow[]) => renderListLevel(rows, 0, -1).html;
+
+// 表格：画廊风格，全内联
+const tableHtml = (raw: string[][]) => {
+  const head = raw[0]
+    .map(
+      (c) =>
+        '<th style="color:#5C7D9B;background:#F5F0E8;font-size:14px;font-weight:800;' +
+        "letter-spacing:.4px;padding:10px 8px 9px;border-bottom:1px solid #EAE2D7;text-align:center;\">" +
+        wechatInline(c.trim()) +
+        "</th>"
+    )
+    .join("");
+  const body = raw
+    .slice(1)
+    .map(
+      (row) =>
+        "<tr>" +
+        row
+          .map(
+            (c) =>
+              '<td style="background:#FFFCF7;padding:10px 9px 11px;color:#333333;text-align:center;' +
+              'vertical-align:middle;">' +
+              wechatInline(c.trim()) +
+              "</td>"
+          )
+          .join("") +
+        "</tr>"
+    )
+    .join("");
+  return (
+    '<table style="width:100%;max-width:100%;border-collapse:separate;border-spacing:0;margin:8px 0 10px;' +
+    'font-size:13px;line-height:1.65;table-layout:fixed;word-break:break-word;background:#FFFCF7;' +
+    'border:1px solid #EEE7DD;border-radius:10px;overflow:hidden;">' +
+    "<thead><tr>" +
+    head +
+    "</tr></thead><tbody>" +
+    body +
+    "</tbody></table>"
+  );
+};
+
+const codeHtml = (text: string) =>
+  '<pre style="color:#E8EEF5;background:#171A1F;border-radius:0;padding:13px 14px;margin:16px 0 20px;' +
+  "overflow-x:auto;white-space:pre-wrap;word-break:break-word;font-size:13px;line-height:1.65;" +
+  "font-family:'SFMono-Regular',Consolas,Menlo,monospace;\">" +
+  escapeHtml(text) +
+  "</pre>";
+
+const quoteHtml = (html: string) =>
+  '<section style="background:#F7FAFE;border:none;border-left:3px solid #74AEEF;padding:10px 14px;' +
+  "margin:20px 0;overflow:hidden;color:#333333;font-size:17px;line-height:1.85;\">" +
+  html +
+  "</section>";
+
+// 逐行块级解析（预览渲染器同一套逻辑，但输出微信专用 HTML）
+export function renderWechat(md: string): string {
+  const lines = md.split(/\r?\n/);
+  const legacy = /^#{6}\s+(\d+)$/.test(lines.join("\n")) ||
+    lines.some((l) => /^#{1,2}\s+\d+[、.．)）（：]/.test(l));
+
+  let out = "";
+  let imageCount = 0;
+  let paragraph: string[] = [];
+  let codeBlock: string[] | null = null;
+  let quoteSection: string[] = [];
+  let listRows: Array<{ ordered: boolean; depth: number; text: string }> = [];
+  let chapterNo = 0;
+  let sectionNo = 0;
+
+  const flushParagraph = () => {
+    if (paragraph.length) {
+      out += '<p style="' + BODY + '">' + wechatInline(paragraph.join(" ")) + "</p>";
+      paragraph = [];
+    }
+  };
+  const flushQuote = () => {
+    if (quoteSection.length) {
+      out += quoteHtml(quoteSection.map((q) => "<p style='margin:0 0 6px;'>" + wechatInline(q) + "</p>").join(""));
+      quoteSection = [];
+    }
+  };
+  const flushList = () => {
+    if (listRows.length) {
+      out += listHtml(listRows);
+      listRows = [];
+    }
+  };
+  const flush = () => {
+    flushParagraph();
+    flushQuote();
+    flushList();
+  };
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    const fence = line.match(/^\s*```(.*)$/);
+    if (codeBlock) {
+      if (fence) {
+        out += codeHtml(codeBlock.join("\n"));
+        codeBlock = null;
+      } else codeBlock.push(line);
+      continue;
+    }
+    if (fence) {
+      flush();
+      codeBlock = [];
+      continue;
+    }
+
+    const legacyNum = line.match(/^#{6}\s+(\d+)$/);
+    const heading = line.match(/^(#{1,6})\s+(.*)$/);
+    const image = line.match(/^!\[([^\]]*)\]\(([^)]+)\)$/);
+    const item = line.match(/^(\s*)([-*+]|\d+[.)、])\s+(.*)$/);
+    const isTable =
+      line.includes("|") &&
+      i + 1 < lines.length &&
+      /^\s*\|?\s*:?-{3,}/.test(lines[i + 1]);
+
+    if (legacyNum) {
+      flush();
+      out += '<p style="margin:20px auto 10px;text-align:center;font-size:60px;line-height:1;' +
+        "font-weight:700;font-family:'Times New Roman',Times,'Songti SC',serif;color:#D9898E;\">" +
+        legacyNum[1] +
+        "</p>";
+    } else if (/^\s*(---+|___+|\*\s*\*\s*\*+)\s*$/.test(line)) {
+      flush();
+      out += '<section style="border:none;border-top:1px solid #74AEEF;width:46px;margin:32px auto;"/>';
+    } else if (isTable) {
+      flush();
+      const rows: string[] = [line];
+      i += 1;
+      while (i < lines.length && lines[i].includes("|")) {
+        rows.push(lines[i]);
+        i += 1;
+      }
+      i -= 1;
+      const cleaned = rows.map((r) =>
+        r.replace(/^\s*\|?/, "").replace(/\|?\s*$/, "").split("|")
+      );
+      out += tableHtml([cleaned[0], ...cleaned.slice(2)]);
+    } else if (image) {
+      flush();
+      imageCount += 1;
+      out += imageHtml(image[2], image[1], imageCount === 1);
+    } else if (heading) {
+      flush();
+      const level = heading[1].length;
+      const text = wechatInline(heading[2], level === 1 ? "#D9898E" : level === 2 ? "#3A8BE8" : undefined);
+      const handNum = level <= 2 ? heading[2].match(/^\s*(\d+(?:\.\d+)?)\s*[、.．)）（：]\s*(.+)$/) : null;
+      if (!legacy && level === 1 && !handNum) {
+        chapterNo += 1;
+        sectionNo = 0;
+        out += chapter(chapterNo, text);
+      } else if (!legacy && level === 2 && !handNum) {
+        sectionNo += 1;
+        out += section(chapterNo > 0 ? chapterNo + "." + sectionNo + "｜" : String(sectionNo).padStart(2, "0") + "｜", text);
+      } else {
+        out += '<p style="' + (level === 1
+          ? "margin:8px auto 24px;text-align:center;font-size:19px;line-height:1.45;font-weight:800;color:#D9898E;"
+          : level === 2
+            ? "margin:28px 0 12px;font-size:17px;line-height:1.6;font-weight:800;color:#3A8BE8;text-align:left;"
+            : "margin:24px 0 10px;font-size:16px;line-height:1.45;font-weight:700;color:#3A8BE8;text-align:left;") + '">' + text + "</p>";
+      }
+    } else if (item) {
+      if (paragraph.length) flushParagraph();
+      const ordered = /^\d/.test(item[2]);
+      const depth = Math.floor(item[1].replace(/\t/g, "  ").length / 2);
+      if (listRows.length && listRows[0].ordered !== ordered) flushList();
+      listRows.push({ ordered, depth, text: item[3] });
+    } else if (line.startsWith(">")) {
+      if (paragraph.length) flushParagraph();
+      quoteSection.push(line.replace(/^>\s?/, ""));
+    } else if (!line.trim()) {
+      flush();
+    } else {
+      paragraph.push(line.trim());
+    }
+  }
+  if (codeBlock) out += codeHtml(codeBlock.join("\n"));
+  flush();
+  return out;
+}
