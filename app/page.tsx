@@ -165,10 +165,16 @@ async function copyRichHtml(html: string) {
   }
 }
 
+// 旧默认示例内容特征：带手写编号“# 1、”。检测到这类历史草稿时重置为新示例，
+// 避免用户看到旧模板排版；用户自己写的正文（不含该特征）不受影响。
+const OLD_SAMPLE_MARKER = "# 1、认识你的 AI 工作台";
+
 export default function Home() {
   const [md, setMd] = useState(() => {
     if (typeof window === "undefined") return sample;
-    return localStorage.getItem("qiuqiu-draft-v2") || sample;
+    const draft = localStorage.getItem("qiuqiu-draft-v2");
+    if (draft && !draft.includes(OLD_SAMPLE_MARKER)) return draft;
+    return sample;
   });
   const [tid, setTid] = useState("qiuqiu");
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "error">("idle");
