@@ -9,7 +9,7 @@ const themes: Theme[] = [["qiuqiu", "秋秋同款", "#d9898e", "#f8f1f2"]];
 
 const sample = `![工作台示例图](https://images.unsplash.com/photo-1498050108023-c5249f4df085?w=1200&q=80)
 
-# 1、认识你的 AI 工作台
+# 认识你的 AI 工作台
 
 这是文章导语。Markdown 适合用来快速组织文章结构，再通过主题统一转换成公众号排版。
 
@@ -17,7 +17,7 @@ const sample = `![工作台示例图](https://images.unsplash.com/photo-14980501
 
 ---
 
-## 1.1 插入图片
+## 插入图片
 
 ![工作台示例图](https://images.unsplash.com/photo-1498050108023-c5249f4df085?w=1200&q=80)
 
@@ -25,7 +25,7 @@ const sample = `![工作台示例图](https://images.unsplash.com/photo-14980501
 
 ---
 
-## 1.2 数据对比
+## 数据对比
 
 | 功能 | 使用方式 | 状态 |
 | --- | --- | --- |
@@ -36,7 +36,7 @@ const sample = `![工作台示例图](https://images.unsplash.com/photo-14980501
 
 ---
 
-## 1.3 为什么需要工作台
+## 为什么需要工作台
 
 一个好的工作台，应该具备：
 
@@ -54,14 +54,14 @@ const sample = `![工作台示例图](https://images.unsplash.com/photo-14980501
 
 ---
 
-## 1.4 一段引用
+## 一段引用
 
 > 好的工具，不是功能越多越好，
 > 而是刚好适合你的工作方式。
 
 ---
 
-## 1.5 代码示例
+## 代码示例
 
 行内代码示例：\`npm run dev\`
 
@@ -77,139 +77,9 @@ console.log(editor.name);
 
 ---
 
-# 2、认识你的 AI 工作台`;
+# 第二章节`;
 
-const esc = (s: string) =>
-  s
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
-
-const inl = (s: string) =>
-  esc(s)
-    .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1"/>')
-    .replace(/`([^`]+)`/g, "<code>$1</code>")
-    .replace(
-      /(^|[\s(])\[([ xX])\](?=\s|$)/g,
-      (_, prefix, state) =>
-        prefix +
-        '<span class="task-check ' +
-        (state.toLowerCase() === "x" ? "done" : "") +
-        '">[' +
-        state +
-        "]</span>",
-    )
-    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-    .replace(/~~([^~]+)~~/g, "<del>$1</del>")
-    .replace(/\*([^*]+)\*/g, "<em>$1</em>")
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
-
-function render(md: string) {
-  let html = "";
-  let paragraph: string[] = [];
-  let listOpen = false;
-  let listTag = "ul";
-  let code: string[] | null = null;
-  const closeList = () => {
-    if (listOpen) {
-      html += `</${listTag}>`;
-      listOpen = false;
-    }
-  };
-  const flush = () => {
-    if (paragraph.length) {
-      html += `<p>${inl(paragraph.join(" "))}</p>`;
-      paragraph = [];
-    }
-  };
-  const table = (rows: string[]) => {
-    const cells = (row: string[]) => row.map((cell) => `<td>${inl(cell.trim())}</td>`).join("");
-    const head = rows[0].split("|").slice(1, -1);
-    const body = rows.slice(2).map((row) => `<tr>${cells(row.split("|").slice(1, -1))}</tr>`).join("");
-    return `<table><thead><tr>${head.map((cell) => `<th>${inl(cell.trim())}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table>`;
-  };
-  const lines = md.split(/\r?\n/);
-  for (let i = 0; i < lines.length; i += 1) {
-    const line = lines[i];
-    const fence = line.match(/^\s*```(.*)$/);
-    if (code) {
-      if (fence) {
-        html += `<pre><code>${esc(code.join("\n"))}</code></pre>`;
-        code = null;
-      } else code.push(line);
-      continue;
-    }
-    if (fence) {
-      closeList();
-      flush();
-      code = [];
-      continue;
-    }
-    const image = line.match(/^!\[([^\]]*)\]\(([^)]+)\)$/);
-    const numberOnly = line.match(/^#{6}\s+(\d+)$/);
-    const heading = line.match(/^(#{1,6})\s+(.*)$/);
-    const bullet = line.match(/^\s*[-*+]\s+(.*)$/);
-    const ordered = line.match(/^\s*\d+[.)、]\s+(.*)$/);
-    const isTable = line.includes("|") && i + 1 < lines.length && /^\s*\|?\s*:?-{3,}/.test(lines[i + 1]);
-    if (/^\s*(---+|___+|\*\s*\*\s*\*+)\s*$/.test(line)) {
-      closeList();
-      flush();
-      html += "<hr/>";
-    } else if (isTable) {
-      closeList();
-      flush();
-      const rows = [line];
-      i += 1;
-      while (i < lines.length && lines[i].includes("|")) {
-        rows.push(lines[i]);
-        i += 1;
-      }
-      i -= 1;
-      html += table(rows);
-    } else if (image) {
-      closeList();
-      flush();
-      html += `<img src="${esc(image[2])}" alt="${esc(image[1])}"/>`;
-    } else if (numberOnly) {
-      closeList();
-      flush();
-      html += `<div class="article-num" style="display:block;margin:20px auto 10px;color:#D9898E;font-family:'Times New Roman',Times,serif;font-size:68px;font-weight:900;line-height:1;letter-spacing:-3px;text-align:center;">${numberOnly[1]}</div>`;
-    } else if (heading) {
-      closeList();
-      flush();
-      const level = heading[1].length;
-      const numbered = level === 1 ? heading[2].match(/^(\d+)\s*[、.．)）:]\s*(.+)$/) : null;
-      if (numbered) {
-        html += `<div class="article-num" style="display:block;margin:20px auto 10px;color:#D9898E;font-family:'Times New Roman',Times,serif;font-size:68px;font-weight:900;line-height:1;letter-spacing:-3px;text-align:center;">${numbered[1]}</div><h1 style="display:table;margin:8px auto 22px;padding:0 0 10px;color:#D9898E;font-size:19px;font-weight:900;line-height:1.45;text-align:center;border-bottom:1px solid #D9898E;">${inl(numbered[2])}</h1>`;
-      } else html += `<h${level}>${inl(heading[2])}</h${level}>`;
-    } else if (bullet || ordered) {
-      flush();
-      const tag = bullet ? "ul" : "ol";
-      if (!listOpen || listTag !== tag) {
-        closeList();
-        listTag = tag;
-        html += `<${tag} style="list-style:none;padding-left:0;margin:12px 0 18px;">`;
-        listOpen = true;
-      }
-      html += `<li style="list-style:none;padding-left:1.55em;margin:6px 0;text-align:left;">${inl((bullet || ordered)![1])}</li>`;
-    } else if (line.startsWith(">")) {
-      closeList();
-      flush();
-      html += `<blockquote>${inl(line.replace(/^>\s?/, ""))}</blockquote>`;
-    } else if (!line.trim()) {
-      closeList();
-      flush();
-    } else {
-      closeList();
-      paragraph.push(line.trim());
-    }
-  }
-  if (code) html += `<pre><code>${esc(code.join("\n"))}</code></pre>`;
-  closeList();
-  flush();
-  return html;
-}
+import { render } from "../lib/render";
 
 const copyStyleProps = ["color", "font-family", "font-size", "font-weight", "line-height", "letter-spacing", "text-align", "margin", "padding", "background-color", "border", "border-left", "border-bottom", "display", "width"];
 
@@ -224,16 +94,29 @@ function buildCopyHtml(source: HTMLElement) {
     });
   };
   paint(clone, source);
+  // 微信后台不认 list-style，这里把列表标记转成手工 span：
+  // - 顶层列表缩进归零，嵌套子列表保留层级缩进；
+  // - 无序列表按深度使用 • / ◦ / ▪，有序列表始终计数。
+  const listDepth = (list: HTMLElement): number => {
+    let depth = 0;
+    let parent: HTMLElement | null = list.parentElement;
+    while (parent) {
+      if (parent.tagName === "UL" || parent.tagName === "OL") depth += 1;
+      parent = parent.parentElement;
+    }
+    return depth;
+  };
   clone.querySelectorAll("ul, ol").forEach((list) => {
     const element = list as HTMLElement;
     element.style.listStyle = "none";
-    element.style.paddingLeft = "0";
+    element.style.paddingLeft = listDepth(element) > 0 ? "1.45rem" : "0";
   });
   clone.querySelectorAll("ul li").forEach((item) => {
     const li = item as HTMLElement;
     li.style.listStyle = "none";
+    const depth = listDepth(item as HTMLElement);
     const marker = document.createElement("span");
-    marker.textContent = "• ";
+    marker.textContent = depth > 1 ? "◦ " : "• ";
     marker.style.cssText = "color:#3A8BE8;font-weight:700;";
     li.prepend(marker);
   });
