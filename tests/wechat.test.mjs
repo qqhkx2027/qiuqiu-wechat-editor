@@ -28,18 +28,19 @@ test("微信导出：小节使用 p 内拼前缀文本，不加 h2/span", () => 
   assert.match(html, />1\.1｜b<\/p>/);
 });
 
-test("微信导出：列表不使用 ::marker，蓝色前缀 span", () => {
+test("微信导出：列表用 p 平铺，marker 与文本同行不拆行", () => {
   const html = renderWechat("- 甲\n- 乙\n");
-  assert.match(html, /<ul style="[^"]*list-style:none/);
-  assert.match(html, /<strong style="color:#3A8BE8;font-weight:700;margin-right:.4em;">• <\/strong>甲/);
-  assert.match(html, /<strong style="color:#3A8BE8;font-weight:700;margin-right:.4em;">• <\/strong>乙/);
+  assert.doesNotMatch(html, /<ul/);
+  assert.doesNotMatch(html, /<li/);
+  assert.match(html, /<p style="[^"]*color:#333333[^"]*"><strong style="color:#3A8BE8;font-weight:700;margin-right:.4em;">• <\/strong>甲<\/p>/);
+  assert.match(html, /<p style="[^"]*"><strong style="[^"]*margin-right:.4em;">• <\/strong>乙<\/p>/);
 });
 
-test("微信导出：列表 marker 不用 inline-block span，避免微信拆行", () => {
-  const html = renderWechat("- 甲\n1. 乙\n");
-  assert.doesNotMatch(html, /display:inline-block[^>]*>• /);
-  assert.doesNotMatch(html, /<span style="color:#3A8BE8[^"]*">/);
-  assert.match(html, /<strong style="color:#3A8BE8;font-weight:700;margin-right:.4em;">1\. <\/strong>乙/);
+test("微信导出：有序列表用 p 平铺 + 数字 marker", () => {
+  const html = renderWechat("1. 甲\n2. 乙\n");
+  assert.doesNotMatch(html, /<ol|<li/);
+  assert.match(html, /<strong style="[^"]*">1\. <\/strong>甲/);
+  assert.match(html, /<strong style="[^"]*">2\. <\/strong>乙/);
 });
 
 test("微信导出：危险链接/图片被净化", () => {
@@ -74,9 +75,11 @@ test("微信导出：小节前缀不包 span，编号与标题不断行", () => 
   assert.doesNotMatch(html, /<span[^>]*>01｜<\/span>/);
 });
 
-test("微信导出：嵌套列表保留层级（ul>li>ul）", () => {
+test("微信导出：嵌套列表保留层级（padding 缩进）", () => {
   const html = renderWechat("- 一级 A\n  - 二级 A1\n- 一级 B\n");
-  assert.match(html, /<ul[^>]*>.*一级 A.*<ul[^>]*>.*二级 A1.*<\/ul>.*一级 B/s);
+  assert.doesNotMatch(html, /<ul/);
+  assert.match(html, /padding-left:1\.2em;["]*><strong[^>]*>◦ <\/strong>二级 A1/);
+  assert.match(html, /• <\/strong>一级 A/);
 });
 
 test("微信导出：首图无描边，正文图有描边", () => {

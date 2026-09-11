@@ -65,49 +65,38 @@ const imageHtml = (src: string, alt: string, isCover = false) =>
   (isCover ? "border:none;border-radius:0;" : "border:1px solid #3A8BE8;border-radius:0;") +
   '"/>';
 
-// 列表：微信对 list-style 支持不稳定，手工生成蓝色圆点/数字前缀。
-// 支持嵌套层级：缩进子项递归渲染到子 <ul>。
-// marker 用 <strong> 行内元素（同正文加粗），不包 span+inline-block——
-// 微信后台会把 inline-block span 单独转成块，导致“圆点/编号”与文本断行。
+// 列表：微信对 list-style 支持不稳定，且 <ul>/<li> 粘贴后微信会把首段格式化
+// 元素当成项目符号单独成行。这里全部用 <p> 平铺：每个列表项一个段落，
+// marker 作为行内蓝色加粗文本（<strong>），与正文段落完全同构，粘贴最稳。
 type ListRow = { ordered: boolean; depth: number; text: string };
 const LIST_LI =
   "margin:6px 0;padding:0;font-size:17px;line-height:1.85;letter-spacing:.2px;" +
-  "color:#333333;text-align:left;list-style:none;";
+  "color:#333333;text-align:left;";
 
-function renderListLevel(rows: ListRow[], start: number, parentDepth: number): { html: string; next: number } {
-  if (start >= rows.length || rows[start].depth <= parentDepth) return { html: "", next: start };
-  const first = rows[start];
-  const ordered = first.ordered;
-  let out = '<ul style="margin:0 0 0 0.45rem;padding-left:1rem;list-style:none;">';
-  let i = start;
-  let count = 0;
-  while (i < rows.length && rows[i].depth === first.depth) {
-    const row = rows[i];
-    count += 1;
-    i += 1;
-    const marker = ordered ? count + ". " : row.depth > 0 ? "◦ " : "• ";
-    const markerStyle = "color:#3A8BE8;font-weight:700;margin-right:.4em;";
-    out +=
-      '<li style="' +
-      LIST_LI +
-      '">' +
-      '<strong style="' +
-      markerStyle +
-      '">' +
-      marker +
-      "</strong>" +
-      wechatInline(row.text);
-    if (i < rows.length && rows[i].depth > row.depth) {
-      const child = renderListLevel(rows, i, row.depth);
-      out += child.html;
-      i = child.next;
-    }
-    out += "</li>";
-  }
-  return { html: out + "</ul>", next: i };
-}
-
-const listHtml = (rows: ListRow[]) => renderListLevel(rows, 0, -1).html;
+// 平铺渲染：按行输出 <p>，缩进层级用 padding-left 表示。
+const listHtml = (rows: ListRow[]) =>
+  rows
+    .map((row, index) => {
+      const depth = row.depth;
+      const marker = row.ordered ? index + 1 + ". " : depth > 0 ? "◦ " : "• ";
+      const markerStyle =
+        "color:#3A8BE8;font-weight:700;margin-right:.4em;";
+      const pad = depth > 0 ? "padding-left:" + depth * 1.2 + "em;" : "";
+      return (
+        '<p style="' +
+        LIST_LI +
+        pad +
+        '">' +
+        '<strong style="' +
+        markerStyle +
+        '">' +
+        marker +
+        "</strong>" +
+        wechatInline(row.text) +
+        "</p>"
+      );
+    })
+    .join("");
 
 // 表格：画廊风格，全内联
 const tableHtml = (raw: string[][]) => {
